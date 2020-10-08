@@ -9,42 +9,75 @@ import requests
 from requests.exceptions import HTTPError
 from functools import partial
 from queue import Queue
+from contextlib import ExitStack
+from logging import getLogger
 
 from .api import XeroApi, headers 
 from .exceptions import MultipleTenantError, InvalidTenantError
 
+logger = getLogger(__name__)
 PORT = 8080
 
-client_id = '4B3C0605324F48348668551239500A0D'
-client_secret = 'mILu99MA-HtprWarrQ40mj5w3bo7LFIxNd6r_c8FG64oCfkp'
-scope = 'offline_access accounting.transactions'
 token_endpoint = 'https://identity.xero.com/connect/token'
 connections_endpoint = 'https://api.xero.com/connections'
 authorization_endpoint = 'https://login.xero.com/identity/connect/authorize'
 
-new_oauth_client  = partial(OAuth2Session, client_id, client_secret, scope=scope)
+class XeroConnect:
+    def __init__(self, client_id, client_secret, scope):
+        self.new_oauth_client  = partial(OAuth2Session, client_id, client_secret, scope=scope)
+        self.token_config = None
 
-def cli_connect(tenant_id=None):
-    '''
-    connect returns XeroApi and the config used to connect
-    '''
-    client = new_oauth_client(token_endpoint_auth_method='client_secret_post')
-    redirect_uri = f'http://localhost:{PORT}/callback'
+    def cli_connect(self, tenant_id=None):
+        '''
+        '''
+        client = self.new_oauth_client(token_endpoint_auth_method='client_secret_post')
+        redirect_uri = f'http://localhost:{PORT}/callback'
+    
+        uri, state = client.create_authorization_url(authorization_endpoint,
+                redirect_uri=redirect_uri)
+    
+        authorization_response = get_auth_response(uri)
+        if not authorization_response:
+            return None
+    
+        self.token_config = client.fetch_token(token_endpoint,
+                authorization_response=authorization_response,
+                redirect_uri=redirect_uri)
+    
+        return self.connect(tenant_id)
 
-    uri, state = client.create_authorization_url(authorization_endpoint,
-            redirect_uri=redirect_uri)
+    def conf_connect(self, config, tenant_id=None):
+        self.token_config = config
+        return self.connect(tenant_id)
 
-    authorization_response = get_auth_response(uri)
-    if not authorization_response:
-        return None
+    def connect(self, tenant_id=None):
+        '''
+        Connect using the given config - which is returned from 
+        a normal connect cli_connect
+        If this fails, it tries to use the refresh token.
+        If that fails, it raises the first exception
+        '''
+        def _handle_reconnect():
+            client = self.new_oauth_client()
+            try:
+                logger.info('Using refresh token.')
+                self.token_config = client.refresh_token(token_endpoint,
+                        refresh_token=self.token_config['refresh_token'])
+                return self.token_config
+            except OAuthError as e:
+                logger.error(f'Failed to reconnect using refresh token {e}')
+                return None
 
-    token_response = client.fetch_token(token_endpoint,
-            authorization_response=authorization_response,
-            redirect_uri=redirect_uri)
+        try:
+            tenant_id = check_tenant_id(self.token_config, tenant_id)
+        except HTTPError as e:
+            if e.response.status_code != requests.status_codes.codes['unauthorized']:
+                raise
 
-    tenant_id = check_tenant_id(token_response, tenant_id)
-
-    return XeroApi(token_response['access_token'], tenant_id), token_response
+        _handle_reconnect()
+    
+        return XeroApi(self.token_config['access_token'], tenant_id,
+                handle_reconnect=_handle_reconnect)
 
 def get_auth_response(auth_uri):
     '''
@@ -72,6 +105,7 @@ def get_auth_response(auth_uri):
         res = ex.submit(server.serve_forever)
 
         print('Please authorise using the browser.')
+        logger.debug('Opening browser for %s', auth_uri)
 
         webbrowser.open_new(auth_uri)
 
@@ -83,30 +117,6 @@ def get_auth_response(auth_uri):
         server.shutdown()
 
     return authorization_response # which may be null
-
-def connect_from_config(config, tenant_id=None):
-    '''
-    Connect using the given config - which is returned from 
-    a normal connect cli_connect
-    If this fails, it tries to use the refresh token.
-    If that fails, it raises the first exception
-    '''
-    try:
-        return XeroApi(config['access_token'], check_tenant_id(config, tenant_id))
-    except HTTPError as e:
-        if e.response.status_code != requests.status_codes.codes['unauthorized']:
-            raise
-        auth_error = e
-
-    # auth failed - try to refresh
-    client = new_oauth_client()
-    try:
-        print('Using refresh token')
-        client.refresh_token(token_endpoint, refresh_token=config['refresh_token'])
-    except OAuthError:
-        raise auth_error
-
-    return XeroApi(config['access_token'], check_tenant_id(config, tenant_id))
 
 def check_tenant_id(token_response, tenant_id=None):
     '''
