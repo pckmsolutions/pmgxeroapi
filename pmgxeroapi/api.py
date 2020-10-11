@@ -1,5 +1,8 @@
 import requests
 from functools import partial
+from logging import getLogger
+
+logger = getLogger(__name__)
 
 base_url = 'https://api.xero.com/api.xro/2.0'
 
@@ -43,6 +46,8 @@ class XeroApi:
 
             if resp.status_code != requests.status_codes.codes['unauthorized']:
                 resp.raise_for_status()
+
+            logger.warning('Request unauthorised - attempting to reconnect')
 
             access_token = handle_reconnect()
             if not access_token:

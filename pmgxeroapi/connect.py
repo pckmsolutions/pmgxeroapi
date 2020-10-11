@@ -60,7 +60,7 @@ class XeroConnect:
         def _handle_reconnect():
             client = self.new_oauth_client()
             try:
-                logger.info('Using refresh token.')
+                logger.info('Reconnecting using refresh token.')
                 self.token_config = client.refresh_token(token_endpoint,
                         refresh_token=self.token_config['refresh_token'])
                 return self.token_config
@@ -73,8 +73,7 @@ class XeroConnect:
         except HTTPError as e:
             if e.response.status_code != requests.status_codes.codes['unauthorized']:
                 raise
-
-        _handle_reconnect()
+            _handle_reconnect()
     
         return XeroApi(self.token_config['access_token'], tenant_id,
                 handle_reconnect=_handle_reconnect)
