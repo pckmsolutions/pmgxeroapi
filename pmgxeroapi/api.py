@@ -34,29 +34,25 @@ class XeroApi:
 
     def _resp_wrap(self, f, handle_reconnect):
         async def wrapper(*args, **kwargs):
-            resp = await f(*args, headers=self.base_headers, **kwargs)
-            if resp.status == 200:
-                return await resp.json()
+            attempts = 0
+            while True:
+                resp = await f(*args, headers=self.base_headers, **kwargs)
+                if resp.status == 200:
+                    return await resp.json()
 
-            if handle_reconnect is None:
-                resp.raise_for_status()
+                if handle_reconnect is None or attempts > 0:
+                    resp.raise_for_status()
 
-            if resp.status != requests.status_codes.codes['unauthorized']:
-                resp.raise_for_status()
+                if resp.status != requests.status_codes.codes['unauthorized']:
+                    resp.raise_for_status()
 
-            logger.warning('Request unauthorised - attempting to reconnect')
+                logger.warning('Request unauthorised - attempting to reconnect')
 
-            token_type, access_token = handle_reconnect()
-            if not token_type or not access_token:
-                resp.raise_for_status()
+                token_type, access_token = handle_reconnect()
+                if not token_type or not access_token:
+                    resp.raise_for_status()
 
-            self.base_headers = xero_headers(access_token, self.tenant_id)
-
-            # try again
-            resp = await f(*args, headers=self.base_headers, **kwargs)
-            if resp.status == 200:
-                resp.raise_for_status()
-            return await resp.json()
+                self.base_headers = xero_headers(access_token, self.tenant_id)
 
         return wrapper
 
