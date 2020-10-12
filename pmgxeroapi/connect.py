@@ -23,7 +23,9 @@ connections_endpoint = 'https://api.xero.com/connections'
 authorization_endpoint = 'https://login.xero.com/identity/connect/authorize'
 
 class XeroConnect:
-    def __init__(self, client_id, client_secret, scope):
+    def __init__(self, aiohttp_session, client_id, client_secret, scope, new_token_callable = None):
+        self.aiohttp_session = aiohttp_session
+        self.new_token_callable = new_token_callable
         self.new_oauth_client  = partial(OAuth2Session, client_id, client_secret, scope=scope)
         self.token_config = None
 
@@ -63,6 +65,8 @@ class XeroConnect:
                 logger.info('Reconnecting using refresh token.')
                 self.token_config = client.refresh_token(token_endpoint,
                         refresh_token=self.token_config['refresh_token'])
+                if self.new_token_callable:
+                    self.new_token_callable(self.token_config)
                 return self.token_config
             except OAuthError as e:
                 logger.error(f'Failed to reconnect using refresh token {e}')
@@ -75,7 +79,7 @@ class XeroConnect:
                 raise
             _handle_reconnect()
     
-        return XeroApi(self.token_config['access_token'], tenant_id,
+        return XeroApi(self.aiohttp_session, self.token_config['access_token'], tenant_id,
                 handle_reconnect=_handle_reconnect)
 
 def get_auth_response(auth_uri):
@@ -92,6 +96,8 @@ def get_auth_response(auth_uri):
             self.end_headers()
             self.wfile.write(b'You may now close this browser window.')
             self.wfile.flush()
+        def log_message(self, format, *args):
+            logger.info(format % args)
 
     socketserver.TCPServer.allow_reuse_address = True
 
@@ -103,7 +109,7 @@ def get_auth_response(auth_uri):
 
         res = ex.submit(server.serve_forever)
 
-        print('Please authorise using the browser.')
+        print('Xero: Please authorise using the browser.')
         logger.debug('Opening browser for %s', auth_uri)
 
         webbrowser.open_new(auth_uri)
