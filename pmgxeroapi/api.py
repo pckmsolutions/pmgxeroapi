@@ -9,12 +9,9 @@ class XeroApi:
     def __init__(self, aiohttp_session, access_token, tenant_id, handle_reconnect=None):
         self.aiohttp_session = aiohttp_session
         self.tenant_id = tenant_id
-        self._set_callers(access_token, handle_reconnect)
-
-    def _set_callers(self, access_token, handle_reconnect):
-        hdrs = headers(access_token, self.tenant_id)
-        self.get = self._resp_wrap(self.aiohttp_session.get,hdrs, handle_reconnect)
-        self.post = self._resp_wrap(self.aiohttp_session.post, hdrs, handle_reconnect)
+        self.base_headers = xero_headers(access_token, tenant_id)
+        self.get = self._resp_wrap(self.aiohttp_session.get, handle_reconnect)
+        self.post = self._resp_wrap(self.aiohttp_session.post, handle_reconnect)
 
     async def get_invoices(self):
         page_number = 1
@@ -35,9 +32,9 @@ class XeroApi:
     def _path(self, suffix):
         return base_url + '/' + suffix
 
-    def _resp_wrap(self, f, headers, handle_reconnect):
+    def _resp_wrap(self, f, handle_reconnect):
         async def wrapper(*args, **kwargs):
-            resp = await f(*args, headers=headers, **kwargs)
+            resp = await f(*args, headers=self.base_headers, **kwargs)
             if resp.status == 200:
                 return await resp.json()
 
@@ -49,20 +46,21 @@ class XeroApi:
 
             logger.warning('Request unauthorised - attempting to reconnect')
 
-            access_token = handle_reconnect()
-            if not access_token:
+            token_type, access_token = handle_reconnect()
+            if not token_type or not access_token:
                 resp.raise_for_status()
-            self._set_callers(access_token, handle_reconnect)
+
+            self.base_headers = xero_headers(access_token, self.tenant_id)
 
             # try again
-            resp = await f(*args, headers=headers, **kwargs)
+            resp = await f(*args, headers=self.base_headers, **kwargs)
             if resp.status == 200:
                 resp.raise_for_status()
             return await resp.json()
 
         return wrapper
 
-def headers(access_token, xero_tenant_id=None):
+def xero_headers(access_token, xero_tenant_id=None):
     hdrs = {
         'Authorization': f'Bearer {access_token}',
         'Accept': 'application/json',

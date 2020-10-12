@@ -12,7 +12,7 @@ from queue import Queue
 from contextlib import ExitStack
 from logging import getLogger
 
-from .api import XeroApi, headers 
+from .api import XeroApi, xero_headers 
 from .exceptions import MultipleTenantError, InvalidTenantError
 
 logger = getLogger(__name__)
@@ -131,7 +131,7 @@ def check_tenant_id(token_response, tenant_id=None):
     Else it raises an error
     '''
     resp = requests.get(connections_endpoint,
-            headers=headers(token_response['access_token']))
+            headers=xero_headers(token_response['access_token']))
     if not resp.ok:
         resp.raise_for_status()
 
