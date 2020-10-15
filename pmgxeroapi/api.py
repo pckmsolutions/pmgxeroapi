@@ -46,6 +46,8 @@ class XeroApi:
                 if resp.status != requests.status_codes.codes['unauthorized']:
                     resp.raise_for_status()
 
+                attempts += 1
+
                 logger.warning('Request unauthorised - attempting to reconnect')
 
                 token_type, access_token = handle_reconnect()
