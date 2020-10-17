@@ -23,14 +23,15 @@ connections_endpoint = 'https://api.xero.com/connections'
 authorization_endpoint = 'https://login.xero.com/identity/connect/authorize'
 
 class XeroConnect:
-    def __init__(self, aiohttp_session, client_id, client_secret, scope, new_token_callable = None):
+    def __init__(self, aiohttp_session, client_id, client_secret, scope, *,
+            new_token_callable = None, tenant_id = None):
         self.aiohttp_session = aiohttp_session
         self.new_token_callable = new_token_callable
         self.new_oauth_client  = partial(OAuth2Session, client_id, client_secret, scope=scope)
         self.token_config = None
-        self.tenant_id = None
+        self.tenant_id = tenant_id
 
-    async def cli_connect(self, tenant_id=None):
+    async def cli_connect(self):
         '''
         '''
         client = self.new_oauth_client(token_endpoint_auth_method='client_secret_post')
@@ -47,13 +48,13 @@ class XeroConnect:
                 authorization_response=authorization_response,
                 redirect_uri=redirect_uri)
     
-        return await self.connect(tenant_id)
+        return await self.connect()
 
-    async def conf_connect(self, config, tenant_id=None):
+    async def conf_connect(self, config):
         self.token_config = config
-        return await self.connect(tenant_id)
+        return await self.connect()
 
-    async def connect(self, tenant_id=None):
+    async def connect(self):
         '''
         Connect using the given config - which is returned from 
         a normal connect cli_connect
@@ -69,12 +70,11 @@ class XeroConnect:
                 if self.new_token_callable:
                     self.new_token_callable(self.token_config)
                 #return {'access_token': self.token_config['access_token']}
-                return self._header_args(access_token=self.token_config['access_token']),
+                return self._header_args(access_token=self.token_config['access_token'])
             except OAuthError as e:
                 logger.error(f'Failed to reconnect using refresh token {e}')
                 return None
 
-        self.tenant_id = tenant_id
         xero = XeroApi(self.aiohttp_session,
                 self._header_args(
                     access_token=self.token_config['access_token']),
@@ -138,28 +138,3 @@ def get_auth_response(auth_uri):
         server.shutdown()
 
     return authorization_response # which may be null
-
-#def check_tenant_id(token_response, tenant_id=None):
-#    '''
-#    Calls the connections endpoint.
-#    If given a tenant_id it checks if it's valid
-#    Else if only one tenant, it uses that.
-#    Else it raises an error
-#    '''
-#    resp = requests.get(connections_endpoint,
-#            headers=xero_headers(token_response['access_token']))
-#    if not resp.ok:
-#        resp.raise_for_status()
-#
-#    connections = resp.json()
-#
-#    if tenant_id == None:
-#        if len(connections) > 1:
-#            raise MultipleTenantError(connections=connections)
-#        else:
-#            return connections[0]['tenantId']
-#    if not tenant_id in [c['tenantId'] for c in connections]:
-#        raise InvalidTenantError()
-#
-#    return tenant_id
-
