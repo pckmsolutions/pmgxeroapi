@@ -33,3 +33,6 @@ class XeroApi(ApiBase):
     async def update_invoice(self, invoice_number, updates):
         return await self.post(f'Invoices/{invoice_number}', json=updates)
 
+    async def get_connections(self):
+        return await self.get(None, full_path=f'connections')
+
