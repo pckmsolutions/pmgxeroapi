@@ -28,6 +28,7 @@ class XeroConnect:
         self.new_token_callable = new_token_callable
         self.new_oauth_client  = partial(OAuth2Session, client_id, client_secret, scope=scope)
         self.token_config = None
+        self.tenant_id = None
 
     def cli_connect(self, tenant_id=None):
         '''
@@ -67,20 +68,26 @@ class XeroConnect:
                         refresh_token=self.token_config['refresh_token'])
                 if self.new_token_callable:
                     self.new_token_callable(self.token_config)
-                return self.token_config
+                #return {'access_token': self.token_config['access_token']}
+                return self._header_args(access_token=self.token_config['access_token']),
             except OAuthError as e:
                 logger.error(f'Failed to reconnect using refresh token {e}')
                 return None
 
         try:
-            tenant_id = check_tenant_id(self.token_config, tenant_id)
+            self.tenant_id = check_tenant_id(self.token_config, self.tenant_id)
         except HTTPError as e:
             if e.response.status_code != requests.status_codes.codes['unauthorized']:
                 raise
             _handle_reconnect()
     
-        return XeroApi(self.aiohttp_session, self.token_config['access_token'], tenant_id,
+        return XeroApi(self.aiohttp_session,
+                self._header_args(
+                    access_token=self.token_config['access_token']),
                 handle_reconnect=_handle_reconnect)
+
+    def _header_args(self, *, access_token):
+        return {'access_token': access_token, 'xero_tenant_id': self.tenant_id}
 
 def get_auth_response(auth_uri):
     '''
