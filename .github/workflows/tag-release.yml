@@ -1,0 +1,50 @@
+#  Update build (in version) and tag banch
+#
+
+name: Update version and tag
+
+on:
+  push:
+    branches: 
+      - main
+    paths-ignore: 
+      - 'setup.cfg'
+  pull_request:
+    branches: 
+      - main
+    paths-ignore: 
+      - 'setup.cfg'
+
+jobs:
+  update_version:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - name: bump build
+      run: |
+        python << EOF
+        import configparser as cp
+        config = cp.ConfigParser()
+        config.read('setup.cfg')
+        version_parts = config['metadata']['version'].split('.')
+        new_version = '.'.join([*version_parts[:2], *[str(int(version_parts[2]) + 1)]])
+        print(f'::set-output name=NEW_VERSION::{new_version}')
+        config['metadata']['version'] = new_version
+        with open('setup.cfg', 'w') as configfile:
+            config.write(configfile)
+        EOF
+      id: bump-build
+    - name: commit and tag
+      run: |
+        git remote add github "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+        git config --local user.email "actions@githubactions"
+        git config --local user.name "Git Hub Actions"
+        git commit -am 'Updated version to ${{ steps.bump-build.outputs.NEW_VERSION }}'
+        git push github HEAD:${GITHUB_REF}
+        git tag -a "v${{ steps.bump-build.outputs.NEW_VERSION }}" -m "Auto build update ${{ steps.bump-build.outputs.NEW_VERSION }}"
+        git push github "v${{ steps.bump-build.outputs.NEW_VERSION }}"
+

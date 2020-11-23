@@ -7,7 +7,8 @@ BASE_URL = 'https://api.xero.com/api.xro/2.0'
 
 class XeroApi(ApiBase):
     def __init__(self, aiohttp_session, header_args, handle_reconnect=None):
-        super().__init__(aiohttp_session, BASE_URL, header_args,
+        super().__init__(aiohttp_session, BASE_URL,
+                header_args=header_args,
                 handle_reconnect=handle_reconnect)
 
     def create_headers(self, **kwargs):
