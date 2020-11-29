@@ -18,13 +18,15 @@ from .exceptions import MultipleTenantError, InvalidTenantError
 logger = getLogger(__name__)
 PORT = 8080
 
-token_endpoint = 'https://identity.xero.com/connect/token'
-connections_endpoint = 'https://api.xero.com/connections'
-authorization_endpoint = 'https://login.xero.com/identity/connect/authorize'
-
 class XeroConnect:
-    def __init__(self, aiohttp_session, client_id, client_secret, scope, *,
-            new_token_callable = None, tenant_id = None):
+    def __init__(self, aiohttp_session, *,
+            token_endpoint,
+            authorization_endpoint,
+            client_id,
+            client_secret,
+            scope,
+            new_token_callable = None,
+            tenant_id = None):
         self.aiohttp_session = aiohttp_session
         self.new_token_callable = new_token_callable
         self.new_oauth_client  = partial(OAuth2Session, client_id, client_secret, scope=scope)
