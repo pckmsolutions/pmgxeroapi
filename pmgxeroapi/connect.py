@@ -28,6 +28,8 @@ class XeroConnect:
             new_token_callable = None,
             tenant_id = None):
         self.aiohttp_session = aiohttp_session
+        self.token_endpoint = token_endpoint
+        self.authorization_endpoint = authorization_endpoint
         self.new_token_callable = new_token_callable
         self.new_oauth_client  = partial(OAuth2Session, client_id, client_secret, scope=scope)
         self.token_config = None
@@ -39,14 +41,14 @@ class XeroConnect:
         client = self.new_oauth_client(token_endpoint_auth_method='client_secret_post')
         redirect_uri = f'http://localhost:{PORT}/callback'
     
-        uri, state = client.create_authorization_url(authorization_endpoint,
+        uri, state = client.create_authorization_url(self.authorization_endpoint,
                 redirect_uri=redirect_uri)
     
         authorization_response = get_auth_response(uri)
         if not authorization_response:
             return None
     
-        self.token_config = client.fetch_token(token_endpoint,
+        self.token_config = client.fetch_token(self.token_endpoint,
                 authorization_response=authorization_response,
                 redirect_uri=redirect_uri)
     
@@ -67,7 +69,7 @@ class XeroConnect:
             client = self.new_oauth_client()
             try:
                 logger.info('Reconnecting using refresh token.')
-                self.token_config = client.refresh_token(token_endpoint,
+                self.token_config = client.refresh_token(self.token_endpoint,
                         refresh_token=self.token_config['refresh_token'])
                 if self.new_token_callable:
                     self.new_token_callable(self.token_config)
